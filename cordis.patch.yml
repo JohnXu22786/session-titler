@@ -1,0 +1,42 @@
+# dsh-session-caption bundle layer
+#
+# This layer disables the harness's built-in single-stage title provider
+# (the session-title service accepts exactly one provider) and mounts the
+# two-stage caption flow in its place. All values below are the defaults;
+# a user may override any of them from their own profile or home patch
+# without touching this file.
+- id: session-title-llm
+  name: '@deepseek-ai/dsh-session-title-first-prompt-llm'
+  disabled: true
+- insert:
+    - id: session-caption
+      name: dsh-session-caption
+      config:
+        instant:
+          enabled: true
+          prefix: ''
+          maxWords: 6
+          maxCjkChars: 14
+        refine:
+          enabled: true
+          maxWords: 5
+          maxCjkChars: 10
+          maxInputBytes: 4096
+          maxOutputTokens: 64
+          timeoutMs: 60000
+        budget:
+          preferCheap: true
+        summary:
+          enabled: true
+          maxChars: 120
+        timing:
+          idleDelayMs: 5000
+          activityWindowMs: 1500
+          modelCacheMs: 120000
+        model:
+          provider: ''
+          model: ''
+        dedup:
+          enabled: true
+          suffix: '({n})'
+        debug: false

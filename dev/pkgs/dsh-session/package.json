@@ -1,0 +1,1 @@
+{"name":"@deepseek-ai/dsh-session","version":"0.0.1-rc.1-local-stub","type":"module","exports":{".":{"types":"./index.d.ts","default":"./index.js"},"./types":{"types":"./types.d.ts","default":"./types.js"}}}

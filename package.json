@@ -1,0 +1,48 @@
+{
+  "name": "dsh-session-caption",
+  "version": "0.1.0",
+  "description": "Two-phase session captioning for the DeepSeek Harness: instant keyword captions while the conversation is busy, budget-model refinement when it goes idle.",
+  "type": "module",
+  "main": "./lib/src/index.js",
+  "types": "./lib/src/index.d.ts",
+  "files": [
+    "lib/src",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "session",
+    "title",
+    "caption"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.1",
+    "@deepseek-ai/dsh-llm": "file:dev/pkgs/dsh-llm",
+    "@deepseek-ai/dsh-session": "file:dev/pkgs/dsh-session",
+    "@deepseek-ai/dsh-session-title": "file:dev/pkgs/dsh-session-title",
+    "@deepseek-ai/schemastery": "3.18.1",
+    "@types/node": "^24.13.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
