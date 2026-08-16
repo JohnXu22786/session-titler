@@ -1,170 +1,184 @@
 # dsh-session-caption
 
-为 DeepSeek Harness（dsh）提供**两阶段会话题词**（自动命名）：会话进行中先用关键词即时生成标题，空闲后再调用最经济的模型精修。全程后台运行，不打断主流程，不为标题多花一分冤枉钱。
+[简体中文](README.zh.md)
+
+**Two-phase session captioning** (automatic naming) for DeepSeek Harness (dsh): while a session is active, a title is generated instantly from keywords; once idle, the cheapest capable model is called to refine it. Everything runs in the background without interrupting the main flow — no wasted spend on titles.
 
 ```
-用户发消息 ──► [阶段一] 关键词即时题词（零成本、毫秒级）
-                   │
-                   └─► 会话空闲 5 秒 ──► [阶段二] 预算模型精修 + 一句话摘要
-                                              │
-                                              └─► 写入 session/title（可追溯）
+user sends message ──► [Phase 1] instant keyword captioning (zero cost, millisecond)
+                           │
+                           └─► session idle for 5s ──► [Phase 2] budget-model refinement + one-line summary
+                                                          │
+                                                          └─► written to session/title (traceable)
 ```
 
-## 解决的问题
+## Problem It Solves
 
-Harness 的新会话默认只有时间戳编号，长会话列表中难以分辨。已有方案要么只做「等空闲再生成」（用户等待期间没有标题），要么每轮都调用模型（成本高）。本插件把两个思路拆成互补的两段：
+New harness sessions are timestamp-numbered by default, making long session lists hard to scan. Existing approaches either only "wait for idle then generate" (no title while the user waits) or call the model every turn (expensive). This plugin splits the two ideas into complementary phases:
 
-- **阶段一 · 即时题词**：用户消息一落地，立即从最新消息提取关键词，标题几乎零延迟出现，**不调用任何模型**；
-- **阶段二 · 空闲精修**：会话安静下来后，用一次辅助调用把标题从「关键词串」升级为通顺的短语，并顺带产出**一句话会话摘要**（同一请求内完成，不额外计费）；
-- **成本护栏**：精修默认只使用注册模型中最便宜的一档（`flash`/`haiku`/`mini` 等），可显式指定模型，也可完全关闭阶段二。
+- **Phase 1 · Instant captioning**: the moment a user message lands, keywords are extracted from the latest message and a title appears with near-zero latency, **without calling any model**;
+- **Phase 2 · Idle refinement**: once the session goes quiet, a single auxiliary call upgrades the title from a "keyword string" to a natural phrase and also produces a **one-line session summary** (within the same request, no extra billing);
+- **Cost guardrail**: refinement defaults to the cheapest tier among registered models (`flash`/`haiku`/`mini` etc.), with explicit model override and full phase-2 disabling both available.
 
-## 功能特性
+## Features
 
-- **两阶段流水线**：即时关键词题词 → 空闲预算模型精修，标题随会话演进；
-- **成本控制**：预算路由按名称模式从已注册模型目录中挑选最便宜模型并缓存，模型拓扑变化自动失效；
-- **原创关键词算法**：噪声剥离（代码块/URL/Markdown）→ 脚本检测（拉丁/CJK）→ 停用词与虚词过滤 → 词序保持/字符预算截断，中英日韩均可用；
-- **多语言**：标题语言跟随消息语言，拉丁标题按词数、CJK 标题按字符数控制长度；
-- **标题去重**：同一标题不重复写入；跨会话重名时自动追加编号后缀（`Fix Login Bug (2)`）；
-- **摘要联动**：精修时顺带生成一行会话摘要，以 `session/caption-note` 事件写入会话日志，供列表 UI、导出工具等消费；
-- **尊重人工标题**：用户手动改名后自动生成完全停止，绝不覆盖（包括精修调用进行中的改名，也不会被回写）；
-- **零配置可用**：默认值即可运行，全部行为可调。
+- **Two-phase pipeline**: instant keyword captioning → idle budget-model refinement, title evolves with the session;
+- **Cost control**: budget routing picks and caches the cheapest model from the registered model directory by name pattern, invalidated automatically on model topology changes;
+- **Original keyword algorithm**: noise stripping (code blocks/URLs/Markdown) → script detection (Latin/CJK) → stopword and function-word filtering → order-preserving/character-budget truncation, works for Chinese, English, Japanese, and Korean;
+- **Multilingual**: title language follows the message language; Latin titles are length-capped by word count, CJK titles by character count;
+- **Title deduplication**: identical titles are not written twice; cross-session duplicates get a numbered suffix automatically (`Fix Login Bug (2)`);
+- **Summary integration**: refinement also produces a one-line session summary, written to the session log via the `session/caption-note` event for list UIs, export tools, etc.;
+- **Respects manual titles**: automatic generation stops completely after a manual rename — never overrides (even a rename during an in-flight refinement call is not written back);
+- **Zero-config to start**: defaults work out of the box; every behavior is tunable.
 
-## 安装
+## Installing in DSH
 
-本插件是一个标准 dsh **bundle**（配置层 + 插件代码），通过 `dsh plugin` 安装到 profile：
+Install the latest version into a profile from GitHub:
 
 ```sh
-# 从本地目录安装（开发/自用）
-dsh plugin --profile web add /path/to/dsh-session-caption
+dsh plugin --profile demo add github:JohnXu22786/session-titler
+```
 
-# 或打包后安装（tarball / git 引用同理）
+Remove it:
+
+```sh
+dsh plugin --profile demo remove dsh-session-caption
+```
+
+This plugin is a standard dsh **bundle** (configuration layer + plugin code), installed into a profile via `dsh plugin`:
+
+```sh
+# install from a local directory (development / self-use)
+dsh plugin --profile demo add /path/to/dsh-session-caption
+
+# or install a packed tarball (same for tarball / git references)
 npm pack
-dsh plugin --profile web add ./dsh-session-caption-0.1.0.tgz
+dsh plugin --profile demo add ./dsh-session-caption-0.1.0.tgz
 ```
 
-安装时 pnpm 会把包链入 profile 的 `node_modules`，`dsh` 识别 `package.json` 中的 `dsh.bundle` 声明，将 `cordis.patch.yml` 层加入 `dsh.profile.bundles`。重启后生效：
+On install, pnpm links the package into the profile's `node_modules`; `dsh` recognizes the `dsh.bundle` declaration in `package.json` and adds the `cordis.patch.yml` layer to `dsh.profile.bundles`. Takes effect after restart:
 
 ```sh
-dsh --profile web --dump-config   # 应能看到 "session-caption" 行
-dsh web
+dsh --profile demo --dump-config   # should show the "session-caption" line
+dsh
 ```
 
-### 加载原理（给 harness 开发者）
+### How Loading Works (for harness developers)
 
-1. **Bundle 清单**：`package.json` 中 `dsh.bundle.patch` 指向 `cordis.patch.yml`——这是 bundle 唯一必需的元数据；
-2. **配置层**：`cordis.patch.yml` 先按行 id 停用内置的单阶段标题提供方（会话标题服务同一时刻只接受一个提供方），再插入本插件的配置行；
-3. **入口文件**：`lib/src/index.js` 导出标准 Cordis 插件契约——`name`（`session-caption`）、`inject`（`['sessionTitle', 'sessions', 'llm']`）、`Config`（schemastery 校验 schema）、`apply(ctx, config)`；
-4. **能力注册**：`apply` 中把两阶段流程注册为 `ctx.sessionTitle` 的**唯一提供方**（`automatic: 'all-user-messages'`），同时监听 `session/event` 与 `llm/adapters-updated`；所有监听器、定时器、注册项随插件卸载自动回收。
+1. **Bundle manifest**: `dsh.bundle.patch` in `package.json` points to `cordis.patch.yml` — the only required bundle metadata;
+2. **Configuration layer**: `cordis.patch.yml` first disables the built-in single-phase title provider by line id (the session title service accepts only one provider at a time), then inserts this plugin's configuration line;
+3. **Entry file**: `lib/src/index.js` exports the standard Cordis plugin contract — `name` (`session-caption`), `inject` (`['sessionTitle', 'sessions', 'llm']`), `Config` (schemastery validation schema), `apply(ctx, config)`;
+4. **Capability registration**: `apply` registers the two-phase flow as the **sole provider** of `ctx.sessionTitle` (`automatic: 'all-user-messages'`), and also listens to `session/event` and `llm/adapters-updated`; all listeners, timers, and registrations are reclaimed automatically on plugin unload.
 
-> 注意：`session-title` 服务是单提供方设计。若其他插件也注册了标题提供方，二者会互相取代；本插件的 bundle 层默认已停用内置的 `session-title-llm` 行。
+> Note: the `session-title` service is single-provider by design. If another plugin also registers a title provider, the two replace each other; this plugin's bundle layer disables the built-in `session-title-llm` line by default.
 
-## 配置
+## Configuration
 
-所有字段可选，默认值见下。全局配置写入 `$DSH_HOME/cordis.patch.yml`，按行 id 覆盖：
+All fields are optional; defaults are listed below. Global config goes into `$DSH_HOME/cordis.patch.yml`, overridden by line id:
 
 ```yaml
-# $DSH_HOME/cordis.patch.yml（home 级，作用于所有 profile）
+# $DSH_HOME/cordis.patch.yml (home-level, applies to all profiles)
 - id: session-caption
   config:
     instant:
-      enabled: true        # 阶段一开关
-      prefix: ''           # 即时题词前缀，如 '⚡ '
-      maxWords: 6          # 拉丁标题最大词数
-      maxCjkChars: 14      # CJK 标题最大字符数
+      enabled: true        # phase 1 switch
+      prefix: ''           # instant caption prefix, e.g. '⚡ '
+      maxWords: 6          # max words for Latin titles
+      maxCjkChars: 14      # max characters for CJK titles
     refine:
-      enabled: true        # 阶段二开关
-      maxWords: 5          # 精修标题目标词数（拉丁）
-      maxCjkChars: 10      # 精修标题目标字符数（CJK）
-      maxInputBytes: 4096  # 精修输入消息字节上限（JSON 框架后）
-      maxOutputTokens: 64  # 精修输出 token 上限
-      timeoutMs: 60000     # 精修单次调用超时
+      enabled: true        # phase 2 switch
+      maxWords: 5          # target words for refined titles (Latin)
+      maxCjkChars: 10      # target characters for refined titles (CJK)
+      maxInputBytes: 4096  # byte cap for refine input messages (after JSON framing)
+      maxOutputTokens: 64  # token cap for refine output
+      timeoutMs: 60000     # per-call timeout for refinement
     budget:
-      preferCheap: true    # 只从低成本模型目录挑选
-      # patterns: [...]    # 低成本模型名称模式（按性价比排序）
+      preferCheap: true    # only pick from the low-cost model directory
+      # patterns: [...]    # low-cost model name patterns (ordered by value)
     summary:
-      enabled: true        # 摘要联动开关
-      maxChars: 120        # 摘要最大字符数
+      enabled: true        # summary switch
+      maxChars: 120        # max characters for the summary
     timing:
-      idleDelayMs: 5000    # 空闲判定延迟（精修触发点）
-      activityWindowMs: 1500  # 事件后的活跃窗口
-      modelCacheMs: 120000    # 预算路由缓存时长
+      idleDelayMs: 5000    # idle-detection delay (refine trigger point)
+      activityWindowMs: 1500  # activity window after an event
+      modelCacheMs: 120000    # budget routing cache duration
     model:
-      provider: ''         # 显式精修路由（与 model 成对）
-      model: ''            # 如 deepseek-official / deepseek-v4-flash
+      provider: ''         # explicit refine routing (paired with model)
+      model: ''            # e.g. deepseek-official / deepseek-v4-flash
     dedup:
-      enabled: true        # 标题去重（同标题跳过 + 跨会话编号）
-      suffix: '({n})'      # 编号后缀模板，必须含 {n} 占位符（从 2 起）
-    debug: false           # 调试日志
+      enabled: true        # title dedup (skip identical + cross-session numbering)
+      suffix: '({n})'      # numbering suffix template, must contain {n} placeholder (from 2)
+    debug: false           # debug logging
 ```
 
-> 关闭 `instant.enabled` 后，阶段一不再产出关键词标题，但阶段二依然只在**空闲窗口**运行（忙碌期间的自动生成请求被跳过，标题等会话安静后由定时器驱动生成），不会变成「每条消息都调用模型」。
+> With `instant.enabled` off, phase 1 no longer produces keyword titles, but phase 2 still only runs in the **idle window** (auto-generation requests during busy periods are skipped; the title is generated by the timer once the session quiets down) — it never becomes "call the model on every message".
 
-### 模型选择优先级（阶段二）
+### Model Selection Precedence (phase 2)
 
-1. `model.provider` + `model.model` 显式配置；
-2. `budget.preferCheap` 开启时，扫描所有可配置提供方的模型目录，按 `budget.patterns` 中的模式名匹配并取最优（默认顺序：`flash` → `haiku` → `lite` → `mini` → `nano` → `fast` → …，同档取名字最短者），结果缓存 `timing.modelCacheMs`；
-3. 会话自身的模型路由（`request.route`）；
-4. 都不可用时跳过精修，保留即时题词。
+1. Explicit `model.provider` + `model.model` configuration;
+2. With `budget.preferCheap` on, scan the model directories of all configurable providers, match by the pattern names in `budget.patterns`, and take the best (default order: `flash` → `haiku` → `lite` → `mini` → `nano` → `fast` → …; for the same tier, the shortest name wins), result cached for `timing.modelCacheMs`;
+3. The session's own model route (`request.route`);
+4. If none is available, skip refinement and keep the instant caption.
 
-## 接口
+## Interface
 
-### 提供方（Provider）
+### Provider
 
-注册于 `ctx.sessionTitle`，`id` 为 `session-caption`，自动模式 `all-user-messages`：
+Registered on `ctx.sessionTitle`, `id` `session-caption`, automatic mode `all-user-messages`:
 
-| 字段 | 值 | 说明 |
+| Field | Value | Description |
 | --- | --- | --- |
-| `id` | `session-caption` | 写入 `session/title` 事件的来源标识 |
-| `automatic` | `all-user-messages` | 每条新用户消息触发一次生成 |
-| `generate(request)` | — | 活跃 → 即时题词；空闲 → 精修 |
+| `id` | `session-caption` | source identifier written to `session/title` events |
+| `automatic` | `all-user-messages` | one generation per new user message |
+| `generate(request)` | — | active → instant caption; idle → refinement |
 
-`generate` 输入 `{ session, messages, route?, signal }`，输出 `{ title, messageSeqs, model? }`。以下情况抛 `CaptionSkippedError`（服务端保留现有标题，不视为故障）：
+`generate` receives `{ session, messages, route?, signal }` and returns `{ title, messageSeqs, model? }`. `CaptionSkippedError` is thrown in these cases (the service keeps the existing title, not treated as a failure):
 
-- 用户已手动改名（`source.kind === 'user'`）；
-- 即时阶段无可提取的关键词；
-- 精修结果与当前标题相同（去重，同时标记会话为稳定，避免反复生成）；
-- 无可用的模型路由。
+- the user manually renamed (`source.kind === 'user'`);
+- no extractable keywords in the instant phase;
+- the refined result equals the current title (dedup; also marks the session as stable to avoid repeated generation);
+- no usable model route.
 
-### 事件
+### Events
 
-| 事件 | 类型 | 说明 |
+| Event | Type | Description |
 | --- | --- | --- |
-| `session/title` | log-only（Harness 自带） | 每次接受的标题快照，含来源与消息 seq |
-| `session/caption-note` | log-only（本插件贡献） | 精修时的一句话摘要：`{ title, note, messageSeqs }` |
+| `session/title` | log-only (built into the harness) | snapshot of every accepted title, with source and message seq |
+| `session/caption-note` | log-only (contributed by this plugin) | one-line summary on refinement: `{ title, note, messageSeqs }` |
 
-`caption-note` 与 `title` 一样不进入模型上下文；不识别该事件的回放器可安全跳过（信息性记录）。
+Like `title`, `caption-note` never enters the model context; replay tools that don't recognize the event can safely skip it (informational record).
 
-### 目录结构
+### Directory Structure
 
 ```
 src/
-├── index.ts       # 插件入口：name / inject / Config / apply
-├── config.ts      # 配置 schema 与运行时校验
-├── context.ts     # 结构化 Harness 上下文类型
-├── flow.ts        # 两阶段编排（generate / 事件喂入 / 去重 / 摘要）
-├── keywords.ts    # 阶段一：关键词题词引擎
-├── refine.ts      # 阶段二：预算模型精修 + 摘要
-├── budget.ts      # 成本路由：最便宜模型选择与缓存
-├── pacemaker.ts   # 空闲节拍器：活动感知 + 精修定时
-├── normalizer.ts  # 标题清洗、限长、比较
-├── language.ts    # 拉丁/CJK 脚本检测
-├── events.ts      # 自定义事件声明
-└── errors.ts      # CaptionSkippedError：跳过的修订
+├── index.ts       # plugin entry: name / inject / Config / apply
+├── config.ts      # config schema and runtime validation
+├── context.ts     # structured Harness context types
+├── flow.ts        # two-phase orchestration (generate / event feeding / dedup / summary)
+├── keywords.ts    # phase 1: keyword caption engine
+├── refine.ts      # phase 2: budget-model refinement + summary
+├── budget.ts      # cost routing: cheapest model selection and caching
+├── pacemaker.ts   # idle pacemaker: activity awareness + refine timing
+├── normalizer.ts  # title cleaning, length capping, comparison
+├── language.ts    # Latin/CJK script detection
+├── events.ts      # custom event declarations
+└── errors.ts      # CaptionSkippedError: skipped refinements
 ```
 
-## 开发
+## Development
 
 ```sh
-npm install     # 开发依赖（含 dev/pkgs 下三个转发包，file: 引用，可重装）
-npm run typecheck   # tsc 类型检查
-npm test            # vitest 单元与流程测试（86 例）
-npm run build       # 编译到 lib/src/
+npm install     # dev dependencies (incl. three forwarding packages under dev/pkgs, file: refs, reinstallable)
+npm run typecheck   # tsc type checking
+npm test            # vitest unit and flow tests (86 cases)
+npm run build       # compile to lib/src/
 ```
 
-> **运行时依赖说明**：插件在运行期使用 `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-session`、`@deepseek-ai/dsh-session-title`，它们由 dsh 安装本身提供，**未在 manifest 中声明为 dependencies/peerDependencies**——这三个包的 npm 传递依赖链目前不完整（一个传递包未发布），声明会导致安装失败；若装入不含这些包的自定义 profile，加载时会报 `ERR_MODULE_NOT_FOUND`，把包装进 profile 的 `node_modules` 即可。
+> **Runtime dependency note**: at runtime the plugin uses `@deepseek-ai/dsh-llm`, `@deepseek-ai/dsh-session`, `@deepseek-ai/dsh-session-title`, which are provided by the dsh installation itself and are **not declared as dependencies/peerDependencies** in the manifest — the npm transitive dependency chain of these three packages is currently incomplete (one transitive package is unpublished), and declaring them would break installation; if loaded into a custom profile lacking these packages, loading fails with `ERR_MODULE_NOT_FOUND` — just install the package into the profile's `node_modules`.
 >
-> **本地开发镜像**：`stubs/` 目录是这三个包的最小 API 镜像（与发布版 rc.1 的已消费成员逐一核对）；`dev/pkgs/` 下是三个薄转发包（`file:` 依赖），供 tsc 解析与本地测试，不随插件发布（`files` 只含 `lib/src`、配置层与文档）。
+> **Local dev mirror**: the `stubs/` directory is a minimal API mirror of these three packages (checked member-by-member against the released rc.1); `dev/pkgs/` holds three thin forwarding packages (`file:` deps) for tsc resolution and local tests; they are not shipped with the plugin (`files` only includes `lib/src`, the configuration layer, and docs).
 
-## 许可
+## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
