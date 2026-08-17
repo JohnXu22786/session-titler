@@ -1,6 +1,8 @@
 node_modules/
 dist/
+coverage/
 .venv/
 __pycache__/
 *.pyc
+*.tsbuildinfo
 .DS_Store
