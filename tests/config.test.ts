@@ -51,6 +51,13 @@ describe('resolveCaptionConfig', () => {
     expect(() => resolveCaptionConfig(undefined)).not.toThrow()
   })
 
+  it('trims whitespace around the explicit model override', () => {
+    const config = resolveCaptionConfig({
+      model: { provider: '  deepseek-official  ', model: ' deepseek-v4-flash ' },
+    })
+    expect(config.model).toEqual({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+  })
+
   it('deep-freezes the resolved policy', () => {
     const config = resolveCaptionConfig({})
     expect(() => {
