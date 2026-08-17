@@ -193,6 +193,22 @@ describe('caption flow — two stages', () => {
     expect(resultB.title).toBe('Fix Login Bug (2)')
   })
 
+  it('deduplication is a no-op when disabled', async () => {
+    const config: CaptionConfig = { ...defaultConfig, dedup: { enabled: false, suffix: '({n})' } }
+    const { store, flow } = harness(config)
+    const a = store.create('a' as never)
+    const b = store.create('b' as never)
+    flow.onSessionEvent(a, userEvent(a, 1, 'fix the login bug'))
+    flow.onSessionEvent(b, userEvent(b, 1, 'fix the login bug'))
+    const resultA = await flow.generate(request(a, [{ seq: 1, text: 'fix the login bug' }]))
+    acceptTitle(a, resultA)
+    const resultB = await flow.generate(request(b, [{ seq: 1, text: 'fix the login bug' }]))
+    expect(resultA.title).toBe('Fix Login Bug')
+    // Without dedup the identical caption is proposed as-is; the harness's
+    // unchanged-caption skip is the only thing that would keep it away.
+    expect(resultB.title).toBe('Fix Login Bug')
+  })
+
   it('keeps numbering beyond the 99th same-titled session', async () => {
     const { store, titles, flow } = harness()
     // Session "owner" takes the bare title; "dup2".."dup99" take the numbered
