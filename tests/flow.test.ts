@@ -193,6 +193,28 @@ describe('caption flow — two stages', () => {
     expect(resultB.title).toBe('Fix Login Bug (2)')
   })
 
+  it('keeps numbering beyond the 99th same-titled session', async () => {
+    const { store, titles, flow } = harness()
+    // Session "owner" takes the bare title; "dup2".."dup99" take the numbered
+    // suffixes. The fresh session must still get "(100)" instead of a
+    // duplicate of the bare title.
+    const owner = store.create('owner' as never)
+    flow.onSessionEvent(owner, userEvent(owner, 1, 'fix the login bug'))
+    const first = await flow.generate(request(owner, [{ seq: 1, text: 'fix the login bug' }]))
+    expect(first.title).toBe('Fix Login Bug')
+    acceptTitle(owner, first)
+    for (let n = 2; n <= 99; n++) {
+      const dup = store.create(`dup${n}` as never)
+      // Accept the numbered title like the service applying a provider result:
+      // `rename` would run it through the normalizer and mangle the parens.
+      acceptTitle(dup, { title: `Fix Login Bug (${n})`, messageSeqs: [] })
+    }
+    const fresh = store.create('fresh' as never)
+    flow.onSessionEvent(fresh, userEvent(fresh, 1, 'fix the login bug'))
+    const result = await flow.generate(request(fresh, [{ seq: 1, text: 'fix the login bug' }]))
+    expect(result.title).toBe('Fix Login Bug (100)')
+  })
+
   it('falls back to refinement when the session is already idle', async () => {
     const { store, titles, flow, stream } = harness(defaultConfig, 'Idle refined title')
     const session = store.create('s1' as never)

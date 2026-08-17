@@ -107,7 +107,9 @@ export function createCaptionFlow(deps: FlowDeps, config: CaptionConfig, log: Fl
       if (theirs !== undefined && theirs.length > 0) taken.add(theirs)
     }
     if (!taken.has(title)) return title
-    for (let n = 2; n <= 99; n++) {
+    // No arbitrary iteration cap: the byte budget of the suffix is the only
+    // bound, so numbering keeps working past 99 same-titled sessions.
+    for (let n = 2; ; n++) {
       const suffix = ` ${config.dedup.suffix.replace('{n}', String(n))}`
       const room = SERVICE_MAX_TITLE_BYTES - Buffer.byteLength(suffix, 'utf8')
       if (room < 1) break // an oversized suffix cannot produce a valid title
