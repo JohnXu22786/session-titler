@@ -138,7 +138,7 @@ export class KeywordCaptioner {
     const kept: string[] = []
     for (const token of tokens) {
       if (LATIN_STOPWORDS.has(token.toLowerCase())) continue
-      if (!kept.includes(token)) kept.push(token)
+      if (!kept.some((k) => k.toLowerCase() === token.toLowerCase())) kept.push(token)
       if (kept.length >= this.options.maxWords) break
     }
     if (kept.length === 0) return null
@@ -154,7 +154,7 @@ export class KeywordCaptioner {
     for (const token of tokens) {
       if (/[A-Za-z]/.test(token)) {
         if (LATIN_STOPWORDS.has(token.toLowerCase())) continue
-        if (!kept.includes(token)) kept.push(token)
+        if (!kept.some((k) => k.toLowerCase() === token.toLowerCase())) kept.push(token)
       } else {
         const cleaned = [...token].filter((ch) => !CJK_FUNCTION_CHARS.has(ch)).join('')
         if (cleaned.length === 0) continue

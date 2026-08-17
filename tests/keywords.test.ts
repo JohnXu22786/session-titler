@@ -41,6 +41,12 @@ describe('KeywordCaptioner.make — Latin', () => {
     expect(caption).toBe('Write Tests Payment Processing Module')
   })
 
+  it('deduplicates tokens regardless of casing', () => {
+    // "JWT" and "jwt" denote the same concept; the caption must not repeat it.
+    const caption = engine().make([msg(1, 'Setup JWT and jwt auth for the api')])
+    expect(caption).toBe('Setup JWT Auth Api')
+  })
+
   it('strips openers like please/can you/thanks', () => {
     expect(engine().make([msg(1, 'thanks, can you please check the api response format')])).toBe('Check Api Response Format')
   })
