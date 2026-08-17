@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CaptionNormalizer, truncateUtf8, SERVICE_MAX_TITLE_BYTES } from '../src/normalizer.js'
+import { CaptionNormalizer, truncateUtf8, truncateChars, SERVICE_MAX_TITLE_BYTES } from '../src/normalizer.js'
 
 const n = new CaptionNormalizer()
 
@@ -67,5 +67,19 @@ describe('truncateUtf8', () => {
 
   it('exposes the service-side ceiling constant', () => {
     expect(SERVICE_MAX_TITLE_BYTES).toBe(80)
+  })
+})
+
+describe('truncateChars', () => {
+  it('returns the input when it fits', () => {
+    expect(truncateChars('abcdef', 6)).toBe('abcdef')
+  })
+
+  it('truncates by code-point count without splitting a surrogate pair', () => {
+    // Two astral-plane emoji are 4 UTF-16 units; cutting at 1 code point must
+    // keep exactly one complete emoji, never a lone surrogate.
+    const pair = '\u{1F600}\u{1F601}'
+    expect(truncateChars(pair, 1)).toBe('\u{1F600}')
+    expect(() => Buffer.from(truncateChars('\u{1F600}\u{1F601}\u{1F602}', 2), 'utf8').toString('utf8')).not.toThrow()
   })
 })
